@@ -1,28 +1,24 @@
 from flask import Flask, request, jsonify
 import fitz  # PyMuPDF
-import requests
 import tempfile
 
 app = Flask(__name__)
 
 @app.route('/analyze', methods=['POST'])
 def analyze_resume():
-    data = request.json
-    file_url = data.get('file_url')
-    if not file_url:
-        return jsonify({"error": "Missing file_url"}), 400
+    file = request.files.get('resume')
+    if not file:
+        return jsonify({'error': 'No resume uploaded'}), 400
 
     try:
-        response = requests.get(file_url)
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            tmp.write(response.content)
-            tmp_path = tmp.name
+            file.save(tmp.name)
+            doc = fitz.open(tmp.name)
+            text = ""
+            for page in doc:
+                text += page.get_text()
 
-        doc = fitz.open(tmp_path)
-        text = ""
-        for page in doc:
-            text += page.get_text()
-
+        # Basic analysis
         score = 0
         recommendations = []
 
@@ -39,7 +35,9 @@ def analyze_resume():
         if "Internship" in text:
             score += 20
         else:
-            recommendations.append("Include internships")
+            recommendations.append("Include any internships")
+
+        score = min(score, 100)
 
         return jsonify({
             "score": score,
@@ -47,7 +45,7 @@ def analyze_resume():
         })
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({'error': str(e)}), 500
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+if __name__ == '__main__':
+    app.run(debug=True)
